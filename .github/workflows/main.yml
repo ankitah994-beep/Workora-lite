@@ -1,4 +1,4 @@
-name: Android Build
+herename: Android Build
 
 on:
   push:
@@ -18,8 +18,8 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+    - name: Generate Gradle Wrapper
+      run: gradle wrapper
 
     - name: Build Debug APK
       run: ./gradlew assembleDebug
