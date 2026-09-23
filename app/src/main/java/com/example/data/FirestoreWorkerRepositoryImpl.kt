@@ -189,37 +189,45 @@ class FirestoreWorkerRepositoryImpl(
     }
 
     override suspend fun getWorkersByIds(workerIds: List<String>): List<User> {
+        return getWorkersByUids(workerIds)
+    }
+
+    override suspend fun getWorkersByUids(uids: List<String>): List<User> {
+        if (uids.isEmpty()) return emptyList()
         val db = firestore
         val results = mutableListOf<User>()
         val fallbackList = fallbackWorkers.value
 
-        for (idStr in workerIds) {
+        for (uid in uids) {
             var worker: User? = null
             if (db != null) {
                 try {
-                    val doc = db.collection(workersCollection).document(idStr).get().awaitTask()
-                    if (doc != null && doc.exists()) {
-                        worker = doc.toWorkerProfile()
+                    // Query the users collection for the provided UID
+                    val userDoc = db.collection("users").document(uid).get().awaitTask()
+                    if (userDoc != null && userDoc.exists()) {
+                        val uData = userDoc.data
+                        if (uData != null) {
+                            worker = User(
+                                id = (uData["id"] as? Number)?.toLong() ?: uid.hashCode().toLong(),
+                                name = uData["name"] as? String ?: uData["fullName"] as? String ?: "Worker",
+                                trade = uData["trade"] as? String ?: uData["skill"] as? String ?: "Skilled Labour",
+                                dailyWage = (uData["dailyWage"] as? Number)?.toInt() ?: 750,
+                                experienceYears = (uData["experienceYears"] as? Number)?.toInt() ?: 5,
+                                rating = (uData["rating"] as? Number)?.toFloat() ?: 4.8f,
+                                reviewsCount = (uData["reviewsCount"] as? Number)?.toInt() ?: 24,
+                                location = uData["location"] as? String ?: "Gurugram",
+                                distance = uData["distance"] as? String ?: "1.5 km",
+                                phone = uData["phone"] as? String ?: uData["mobileNumber"] as? String ?: "+91 98000 00000",
+                                isAvailableToday = true,
+                                isVerified = true
+                            )
+                        }
                     }
                     if (worker == null) {
-                        val userDoc = db.collection("users").document(idStr).get().awaitTask()
-                        if (userDoc != null && userDoc.exists()) {
-                            val uData = userDoc.data
-                            if (uData != null) {
-                                worker = User(
-                                    id = (uData["id"] as? Number)?.toLong() ?: idStr.toLongOrNull() ?: 1L,
-                                    name = uData["name"] as? String ?: uData["fullName"] as? String ?: "Worker",
-                                    trade = uData["trade"] as? String ?: "Skilled Labour",
-                                    dailyWage = (uData["dailyWage"] as? Number)?.toInt() ?: 750,
-                                    experienceYears = (uData["experienceYears"] as? Number)?.toInt() ?: 5,
-                                    rating = (uData["rating"] as? Number)?.toFloat() ?: 4.7f,
-                                    reviewsCount = (uData["reviewsCount"] as? Number)?.toInt() ?: 18,
-                                    location = uData["location"] as? String ?: "Delhi NCR",
-                                    phone = uData["phone"] as? String ?: uData["mobileNumber"] as? String ?: "+91 98000 00000",
-                                    isAvailableToday = true,
-                                    isVerified = true
-                                )
-                            }
+                        // Also check workers collection as fallback
+                        val workerDoc = db.collection(workersCollection).document(uid).get().awaitTask()
+                        if (workerDoc != null && workerDoc.exists()) {
+                            worker = workerDoc.toWorkerProfile()
                         }
                     }
                 } catch (e: Exception) {
@@ -227,18 +235,20 @@ class FirestoreWorkerRepositoryImpl(
                 }
             }
             if (worker == null) {
-                worker = fallbackList.firstOrNull { it.id.toString() == idStr }
-                    ?: fallbackList.firstOrNull { it.name.contains(idStr, ignoreCase = true) }
+                worker = fallbackList.firstOrNull { it.id.toString() == uid }
+                    ?: fallbackList.firstOrNull { it.name.contains(uid, ignoreCase = true) }
                     ?: User(
-                        id = idStr.toLongOrNull() ?: 1L,
-                        name = if (idStr == "1") "Rajesh Sharma" else if (idStr == "2") "Sunil Kumar" else if (idStr == "3") "Amit Verma" else "Worker $idStr",
-                        trade = if (idStr == "1") "Mason" else if (idStr == "2") "Painter" else if (idStr == "3") "Carpenter" else "Skilled Labour",
+                        id = uid.hashCode().toLong(),
+                        name = if (uid == "1") "Rajesh Sharma" else if (uid == "2") "Sunil Kumar" else if (uid == "3") "Amit Verma" else "Worker $uid",
+                        trade = if (uid == "1") "Mason" else if (uid == "2") "Painter" else if (uid == "3") "Carpenter" else "Skilled Artisan",
                         dailyWage = 750,
                         experienceYears = 5,
                         rating = 4.8f,
                         reviewsCount = 24,
                         location = "Delhi NCR",
-                        phone = "+91 98765 00000"
+                        phone = "+91 98765 00000",
+                        isAvailableToday = true,
+                        isVerified = true
                     )
             }
             results.add(worker)

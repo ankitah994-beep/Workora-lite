@@ -20,6 +20,8 @@ interface JobRepository {
     suspend fun updateJobStatus(jobId: String, newStatus: JobStatus): Boolean
     fun getJobById(jobId: String): Flow<Job?>
     suspend fun hireWorkerForJob(jobId: String, workerId: String): Result<Unit>
+    suspend fun applyForJob(jobId: String, workerUid: String): Boolean
+    suspend fun hireWorker(jobId: String, workerUid: String): Boolean
     fun getJobsAppliedByWorker(workerUid: String): Flow<List<Job>>
 }
 
@@ -163,6 +165,27 @@ class MockJobRepository : JobRepository {
             _savedJobs.value = current
         }
         return Result.success(Unit)
+    }
+
+    override suspend fun applyForJob(jobId: String, workerUid: String): Boolean {
+        val current = _savedJobs.value.toMutableList()
+        val index = current.indexOfFirst { it.id == jobId }
+        if (index != -1) {
+            val job = current[index]
+            val updatedWorkers = if (!job.appliedWorkers.contains(workerUid)) {
+                job.appliedWorkers + workerUid
+            } else {
+                job.appliedWorkers
+            }
+            current[index] = job.copy(appliedWorkers = updatedWorkers)
+            _savedJobs.value = current
+        }
+        return true
+    }
+
+    override suspend fun hireWorker(jobId: String, workerUid: String): Boolean {
+        hireWorkerForJob(jobId, workerUid)
+        return true
     }
 
     override fun getJobsAppliedByWorker(workerUid: String): Flow<List<Job>> {

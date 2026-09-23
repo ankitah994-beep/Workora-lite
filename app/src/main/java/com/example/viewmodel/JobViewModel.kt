@@ -114,11 +114,15 @@ class JobViewModel(
             if (uids.isEmpty()) {
                 _applicants.value = emptyList()
             } else {
-                val workers = workerRepository.getWorkersByUids(uids)
+                val workers = getWorkersByUids(uids)
                 _applicants.value = workers
             }
             _isLoadingApplicants.value = false
         }
+    }
+
+    suspend fun getWorkersByUids(uids: List<String>): List<User> {
+        return workerRepository.getWorkersByUids(uids)
     }
 
     /**

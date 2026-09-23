@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 interface WorkerRepository {
     fun getAvailableWorkers(): Flow<List<User>>
     suspend fun getWorkersByIds(workerIds: List<String>): List<User>
+    suspend fun getWorkersByUids(uids: List<String>): List<User>
 }
 
 /**
@@ -98,5 +99,9 @@ class MockWorkerRepository : WorkerRepository {
                     phone = "+91 98765 00000"
                 )
         }
+    }
+
+    override suspend fun getWorkersByUids(uids: List<String>): List<User> {
+        return getWorkersByIds(uids)
     }
 }

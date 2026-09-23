@@ -4,6 +4,7 @@ import com.example.model.Job
 import com.example.model.JobRequest
 import com.example.model.JobStatus
 import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
@@ -451,6 +452,54 @@ class FirestoreJobRepositoryImpl(
             // Even if network failed or document didn't exist in cloud, return success for local state
             Result.success(Unit)
         }
+    }
+
+    override suspend fun applyForJob(jobId: String, workerUid: String): Boolean {
+        // Update local fallback immediately
+        val current = localJobsFallback.value.toMutableList()
+        val index = current.indexOfFirst { it.id == jobId }
+        if (index != -1) {
+            val job = current[index]
+            val updatedWorkers = if (!job.appliedWorkers.contains(workerUid)) {
+                job.appliedWorkers + workerUid
+            } else {
+                job.appliedWorkers
+            }
+            current[index] = job.copy(appliedWorkers = updatedWorkers)
+            localJobsFallback.value = current
+        }
+
+        val db = firestore ?: return true
+
+        return try {
+            db.collection(jobsCollection)
+                .document(jobId)
+                .update("appliedWorkers", FieldValue.arrayUnion(workerUid))
+                .awaitTask()
+            true
+        } catch (e: Exception) {
+            try {
+                val doc = db.collection(jobsCollection).document(jobId).get().awaitTask()
+                if (doc.exists()) {
+                    val currentWorkers = (doc.get("appliedWorkers") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+                    val updated = if (!currentWorkers.contains(workerUid)) currentWorkers + workerUid else currentWorkers
+                    db.collection(jobsCollection).document(jobId).update("appliedWorkers", updated).awaitTask()
+                } else {
+                    db.collection(jobsCollection).document(jobId).set(
+                        mapOf("appliedWorkers" to listOf(workerUid)),
+                        SetOptions.merge()
+                    ).awaitTask()
+                }
+                true
+            } catch (inner: Exception) {
+                index != -1
+            }
+        }
+    }
+
+    override suspend fun hireWorker(jobId: String, workerUid: String): Boolean {
+        hireWorkerForJob(jobId, workerUid)
+        return true
     }
 
     override fun getJobsAppliedByWorker(workerUid: String): Flow<List<Job>> {
